@@ -97,7 +97,12 @@ std::vector<uint8_t> ProveSlow(std::vector<uint8_t>& challenge_hash, int discrim
         reducer.reduce(y);
     } 
     form x = form::generator(D);
+    // set timer for proving
+    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
     form proof = GenerateWesolowski(y, x, D, reducer, intermediates, num_iterations, k, l);
+    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    std::cout << std::chrono::duration_cast<std::chrono::milliseconds> (end - begin).count() << std::endl;
+    
     std::vector<uint8_t> result = SerializeForm(y, int_size);
     std::vector<uint8_t> proof_bytes = SerializeForm(proof, int_size);
     result.insert(result.end(), proof_bytes.begin(), proof_bytes.end());
