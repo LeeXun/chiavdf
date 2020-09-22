@@ -26,7 +26,7 @@ std::vector<unsigned char> ConvertIntegerToBytes(integer x, uint64_t num_bytes) 
 // Randomly chooses x with bit-length `length`, then applies a mask
 //   (for b in bitmask) { x |= (1 << b) }.
 // Then return x if it is a psuedoprime, otherwise repeat.
-integer HashPrime(std::vector<uint8_t> seed, int length, vector<int> bitmask) {
+integer HashPrime(std::vector<uint8_t> seed, int length, vector<int> bitmask, int iteration = -1) {
     assert (length % 8 == 0);
     std::vector<uint8_t> hash(picosha2::k_digest_size);  // output of sha256
     std::vector<uint8_t> blob;  // output of 1024 bit hash expansions
@@ -34,6 +34,8 @@ integer HashPrime(std::vector<uint8_t> seed, int length, vector<int> bitmask) {
 
     while (true) {  // While prime is not found
         blob.resize(0);
+        // cuz sha256 returns 32 bytes
+        // repeat it to fill blob
         while ((int) blob.size() * 8 < length) {
             // Increment sprout by 1
             for (int i = (int) sprout.size() - 1; i >= 0; --i) {
