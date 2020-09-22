@@ -80,7 +80,9 @@ form GenerateWesolowski(form &y, form &x_init,
 
 std::vector<uint8_t> ProveSlow(std::vector<uint8_t>& challenge_hash, int discriminant_size_bits,
                            uint64_t num_iterations) {
+    T_START(D)
     integer D = CreateDiscriminant(challenge_hash, discriminant_size_bits);
+    T_END(D)
     integer L = root(-D, 4);
     PulmarkReducer reducer;
     form y = form::generator(D);
@@ -89,20 +91,23 @@ std::vector<uint8_t> ProveSlow(std::vector<uint8_t>& challenge_hash, int discrim
     int int_size = (D.num_bits() + 16) >> 4;
 
     ApproximateParameters(num_iterations, l, k);
+
+    T_START(y)
     for (int i = 0; i < num_iterations; i++) {
         if (i % (k * l) == 0) {
             intermediates.push_back(y);
         }
         nudupl_form(y, y, D, L);
         reducer.reduce(y);
-    } 
+    }
+    T_END(y)
+
     form x = form::generator(D);
     // set timer for proving
-    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+    T_START(proof)
     form proof = GenerateWesolowski(y, x, D, reducer, intermediates, num_iterations, k, l);
-    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-    std::cout << std::chrono::duration_cast<std::chrono::milliseconds> (end - begin).count() << std::endl;
-    
+    T_END(proof)
+
     std::vector<uint8_t> result = SerializeForm(y, int_size);
     std::vector<uint8_t> proof_bytes = SerializeForm(proof, int_size);
     result.insert(result.end(), proof_bytes.begin(), proof_bytes.end());

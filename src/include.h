@@ -45,6 +45,10 @@ typedef __int128 int128;
 #include <thread>
 #include "generic.h"
 #include <gmpxx.h>
+#include <chrono>
+#define T_START(s) std::chrono::steady_clock::time_point begin_##s = std::chrono::steady_clock::now();
+#define T_END(s) std::chrono::steady_clock::time_point end_##s = std::chrono::steady_clock::now(); \
+    std::cout << std::chrono::duration_cast<std::chrono::milliseconds> (end_##s - begin_##s).count() << ",";
 
 using namespace std;
 using namespace generic;
