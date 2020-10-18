@@ -6,7 +6,6 @@
 #include "picosha2.h"
 #include "proof_common.h"
 
-
 // TODO: Refactor to use 'Prover' class once new_vdf is merged in.
 
 void ApproximateParameters(uint64_t T, int& l, int& k) {
@@ -112,4 +111,47 @@ std::vector<uint8_t> ProveSlow(std::vector<uint8_t>& challenge_hash, int discrim
     std::vector<uint8_t> proof_bytes = SerializeForm(proof, int_size);
     result.insert(result.end(), proof_bytes.begin(), proof_bytes.end());
     return result;
+}
+
+std::tuple<integer, integer, integer, integer, integer> ProveSlow2(std::vector<uint8_t>& challenge_hash, int discriminant_size_bits,
+                           uint64_t num_iterations) {
+    T_START(D)
+    integer D = CreateDiscriminant(challenge_hash, discriminant_size_bits);
+    T_END(D)
+    integer L = root(-D, 4);
+    PulmarkReducer reducer;
+    form y = form::generator(D);
+    std::vector<form> intermediates;
+    int k, l;
+    int int_size = (D.num_bits() + 16) >> 4;
+
+    ApproximateParameters(num_iterations, l, k);
+
+    T_START(y)
+    for (int i = 0; i < num_iterations; i++) {
+        if (i % (k * l) == 0) {
+            intermediates.push_back(y);
+        }
+        nudupl_form(y, y, D, L);
+        reducer.reduce(y);
+    }
+    T_END(y)
+
+    form x = form::generator(D);
+    // set timer for proving
+    T_START(proof)
+    form proof = GenerateWesolowski(y, x, D, reducer, intermediates, num_iterations, k, l);
+    T_END(proof)
+
+    std::vector<uint8_t> result = SerializeForm(y, int_size);
+    std::vector<uint8_t> proof_bytes = SerializeForm(proof, int_size);
+    result.insert(result.end(), proof_bytes.begin(), proof_bytes.end());
+    // return result;
+    return std::make_tuple(
+        D,
+        y.a,
+        y.b,
+        proof.a,
+        proof.b
+    );
 }

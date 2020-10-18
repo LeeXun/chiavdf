@@ -18,6 +18,7 @@
 #include <stdexcept>
 #include <string>
 #include <array>
+#include <tuple>
 #include <sstream>
 #include <fstream>
 #ifndef _WIN32
