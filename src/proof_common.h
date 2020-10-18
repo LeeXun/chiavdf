@@ -32,6 +32,7 @@ integer HashPrime(std::vector<uint8_t> seed, int length, vector<int> bitmask, in
     std::vector<uint8_t> blob;  // output of 1024 bit hash expansions
     std::vector<uint8_t> sprout = seed;  // seed plus nonce
 
+    int i = 0;
     while (true) {  // While prime is not found
         blob.resize(0);
         // cuz sha256 returns 32 bytes
@@ -47,13 +48,17 @@ integer HashPrime(std::vector<uint8_t> seed, int length, vector<int> bitmask, in
             blob.insert(blob.end(), hash.begin(),
                 std::min(hash.end(), hash.begin() + length / 8 - blob.size()));
         }
-
         assert ((int) blob.size() * 8 == length);
         integer p(blob);  // p = 7 (mod 8), 2^1023 <= p < 2^1024
         for (int b: bitmask)
             p.set_bit(b, true);
+
+        i++;
         if (p.prime())
+        {
+            std::cout << "prime_i=" << i << ",";
             return p;
+        }
     }
 }
 
