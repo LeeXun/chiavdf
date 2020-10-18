@@ -56,7 +56,8 @@ integer HashPrime(std::vector<uint8_t> seed, int length, vector<int> bitmask, in
         i++;
         if (p.prime())
         {
-            std::cout << "prime_i=" << i << ",";
+            // std::cout << "prime_i=" << i << ",";
+            std::cout << i << ",";
             return p;
         }
     }
