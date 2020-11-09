@@ -26,7 +26,7 @@ std::vector<unsigned char> ConvertIntegerToBytes(integer x, uint64_t num_bytes) 
 // Randomly chooses x with bit-length `length`, then applies a mask
 //   (for b in bitmask) { x |= (1 << b) }.
 // Then return x if it is a psuedoprime, otherwise repeat.
-integer HashPrimeFast(std::vector<uint8_t> seed, int length, vector<int> bitmask, int iteration = -1) {
+integer HashPrimeForWorker(std::vector<uint8_t> seed, int length, vector<int> bitmask, int iteration = -1) {
     assert (length % 8 == 0);
     std::vector<uint8_t> hash(picosha2::k_digest_size);  // output of sha256
     std::vector<uint8_t> blob;  // output of 1024 bit hash expansions
@@ -74,6 +74,49 @@ integer HashPrimeFast(std::vector<uint8_t> seed, int length, vector<int> bitmask
             return p;
         }
         #endif
+        
+    }
+}
+
+integer HashPrimeFast(std::vector<uint8_t> seed, int length, vector<int> bitmask, int iteration = -1) {
+    assert (length % 8 == 0);
+    std::vector<uint8_t> hash(picosha2::k_digest_size);  // output of sha256
+    std::vector<uint8_t> blob;  // output of 1024 bit hash expansions
+    std::vector<uint8_t> sprout = seed;  // seed plus nonce
+
+    int i = 0;
+    while (true) {  // While prime is not found
+        blob.resize(0);
+        // cuz sha256 returns 32 bytes
+        // repeat it to fill blob
+        while ((int) blob.size() * 8 < length) {
+            // Increment sprout by 1
+            for (int i = (int) sprout.size() - 1; i >= 0; --i) {
+                sprout[i]++;
+                if (!sprout[i])
+                    break;
+            }
+            picosha2::hash256(sprout.begin(), sprout.end(), hash.begin(), hash.end());
+            blob.insert(blob.end(), hash.begin(),
+                std::min(hash.end(), hash.begin() + length / 8 - blob.size()));
+        }
+        assert ((int) blob.size() * 8 == length);
+        integer p(blob);  // p = 7 (mod 8), 2^1023 <= p < 2^1024
+        for (int b: bitmask)
+            p.set_bit(b, true);
+
+        i++;
+
+        if (i == iteration) {
+            if (p.prime()) {
+                std::cout << "iteraions=" << i << std::endl;
+                return p;
+            } else {
+                std::stringstream ss;
+                ss << "iteraions=" << iteration << "is not a prime.";
+                throw runtime_error(ss.str());;
+            }
+        }
         
     }
 }

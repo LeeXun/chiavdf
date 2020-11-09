@@ -116,7 +116,7 @@ std::vector<uint8_t> ProveSlow(std::vector<uint8_t>& challenge_hash, int discrim
 std::tuple<integer, integer, integer, integer, integer> ProveSlow2(std::vector<uint8_t>& challenge_hash, int discriminant_size_bits,
                            uint64_t num_iterations) {
     T_START(D)
-    integer D = CreateDiscriminant(challenge_hash, discriminant_size_bits);
+    integer D = CreateDiscriminantForWorker(challenge_hash, discriminant_size_bits);
     T_END(D)
     integer L = root(-D, 4);
     PulmarkReducer reducer;
