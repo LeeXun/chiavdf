@@ -79,9 +79,7 @@ form GenerateWesolowski(form &y, form &x_init,
 
 std::vector<uint8_t> ProveSlow(std::vector<uint8_t>& challenge_hash, int discriminant_size_bits,
                            uint64_t num_iterations) {
-    T_START(D)
     integer D = CreateDiscriminant(challenge_hash, discriminant_size_bits);
-    T_END(D)
     integer L = root(-D, 4);
     PulmarkReducer reducer;
     form y = form::generator(D);
@@ -91,7 +89,6 @@ std::vector<uint8_t> ProveSlow(std::vector<uint8_t>& challenge_hash, int discrim
 
     ApproximateParameters(num_iterations, l, k);
 
-    T_START(y)
     for (int i = 0; i < num_iterations; i++) {
         if (i % (k * l) == 0) {
             intermediates.push_back(y);
@@ -99,13 +96,9 @@ std::vector<uint8_t> ProveSlow(std::vector<uint8_t>& challenge_hash, int discrim
         nudupl_form(y, y, D, L);
         reducer.reduce(y);
     }
-    T_END(y)
 
     form x = form::generator(D);
-    // set timer for proving
-    T_START(proof)
     form proof = GenerateWesolowski(y, x, D, reducer, intermediates, num_iterations, k, l);
-    T_END(proof)
 
     std::vector<uint8_t> result = SerializeForm(y, int_size);
     std::vector<uint8_t> proof_bytes = SerializeForm(proof, int_size);
@@ -113,11 +106,11 @@ std::vector<uint8_t> ProveSlow(std::vector<uint8_t>& challenge_hash, int discrim
     return result;
 }
 
-std::tuple<integer, integer, integer, integer, integer> ProveSlow2(std::vector<uint8_t>& challenge_hash, int discriminant_size_bits,
+std::tuple<integer, integer, integer, integer, integer> ProveSlowForWorker(std::vector<uint8_t>& challenge_hash, int discriminant_size_bits,
                            uint64_t num_iterations) {
-    T_START(D)
+    LOG_TIME_START(D)
     integer D = CreateDiscriminantForWorker(challenge_hash, discriminant_size_bits);
-    T_END(D)
+    LOG_TIME_END(D)
     integer L = root(-D, 4);
     PulmarkReducer reducer;
     form y = form::generator(D);
@@ -127,7 +120,7 @@ std::tuple<integer, integer, integer, integer, integer> ProveSlow2(std::vector<u
 
     ApproximateParameters(num_iterations, l, k);
 
-    T_START(y)
+    LOG_TIME_START(y)
     for (int i = 0; i < num_iterations; i++) {
         if (i % (k * l) == 0) {
             intermediates.push_back(y);
@@ -135,13 +128,13 @@ std::tuple<integer, integer, integer, integer, integer> ProveSlow2(std::vector<u
         nudupl_form(y, y, D, L);
         reducer.reduce(y);
     }
-    T_END(y)
+    LOG_TIME_END(y)
 
     form x = form::generator(D);
     // set timer for proving
-    T_START(proof)
+    LOG_TIME_START(proof)
     form proof = GenerateWesolowski(y, x, D, reducer, intermediates, num_iterations, k, l);
-    T_END(proof)
+    LOG_TIME_END(proof)
 
     std::vector<uint8_t> result = SerializeForm(y, int_size);
     std::vector<uint8_t> proof_bytes = SerializeForm(proof, int_size);
