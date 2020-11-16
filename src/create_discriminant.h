@@ -23,4 +23,10 @@ integer CreateDiscriminantSlow(std::vector<uint8_t>& seed, int length = 1024, in
     return D;
 }
 
+std::tuple<integer, int> CreateDiscriminantReturnsIteration(std::vector<uint8_t>& seed, int length = 1024) {
+    integer D; int d_iter;
+    tie(D, d_iter) = HashPrimeReturnsIteration(seed, length, {0, 1, 2, length - 1});
+    return std::make_tuple(D*integer(-1), d_iter);
+}
+
 #endif // CREATE_DISCRIMINANT_H

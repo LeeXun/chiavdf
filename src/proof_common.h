@@ -189,13 +189,44 @@ integer HashPrimeWithLog(std::vector<uint8_t> seed, int length, vector<int> bitm
 
         if (p.prime())
         {
-            // std::cout << "prime_i=" << i << ",";
-            #ifdef __EMSCRIPTEN__
             std::cout << "iteraions=" << i << std::endl;
-            #else
-            std::cout << i << ",";
-            #endif
             return p;
+        }
+    }
+}
+
+std::tuple<integer, int> HashPrimeReturnsIteration(std::vector<uint8_t> seed, int length, vector<int> bitmask, int iteration = -1) {
+    assert (length % 8 == 0);
+    std::vector<uint8_t> hash(picosha2::k_digest_size);  // output of sha256
+    std::vector<uint8_t> blob;  // output of 1024 bit hash expansions
+    std::vector<uint8_t> sprout = seed;  // seed plus nonce
+
+    int i = 0;
+    while (true) {  // While prime is not found
+        blob.resize(0);
+        // cuz sha256 returns 32 bytes
+        // repeat it to fill blob
+        while ((int) blob.size() * 8 < length) {
+            // Increment sprout by 1
+            for (int i = (int) sprout.size() - 1; i >= 0; --i) {
+                sprout[i]++;
+                if (!sprout[i])
+                    break;
+            }
+            picosha2::hash256(sprout.begin(), sprout.end(), hash.begin(), hash.end());
+            blob.insert(blob.end(), hash.begin(),
+                std::min(hash.end(), hash.begin() + length / 8 - blob.size()));
+        }
+        assert ((int) blob.size() * 8 == length);
+        integer p(blob);  // p = 7 (mod 8), 2^1023 <= p < 2^1024
+        for (int b: bitmask)
+            p.set_bit(b, true);
+
+        i++;
+
+        if (p.prime())
+        {
+            return std::make_tuple(p, i);
         }
     }
 }
