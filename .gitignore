@@ -5,6 +5,7 @@ __pycache__/
 
 # Generated assembly file
 /asm_compiled.s
+/avx2_asm_compiled.s
 
 # Makefiles
 CMakeFiles/
@@ -12,6 +13,7 @@ Makefile
 CMakeCache.txt
 cmake_install.cmake
 _deps/
+dist
 
 # Binary files
 src/compile_asm
@@ -20,6 +22,9 @@ src/compile_asm
 src/vdf_bench
 /vdf_server
 src/vdf_client
+src/1weso_test
+src/2weso_test
+src/prover_test
 /verifier
 /verifier_test
 /build/*
@@ -38,3 +43,6 @@ activate
 # Tests cache
 .mypy_cache
 .pytest_cache
+
+src/cmake-build-debug/
+.idea

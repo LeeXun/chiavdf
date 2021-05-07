@@ -1,25 +1,10 @@
 #ifndef PROOF_COMMON_H
 #define PROOF_COMMON_H
 #include "Reducer.h"
+#include "bqfc.c"
 
-std::vector<unsigned char> ConvertIntegerToBytes(integer x, uint64_t num_bytes) {
-    std::vector<unsigned char> bytes;
-    bool negative = false;
-    if (x < 0) {
-        x = abs(x);
-        x = x - integer(1);
-        negative = true;
-    }
-    for (int iter = 0; iter < num_bytes; iter++) {
-        auto byte = (x % integer(256)).to_vector();
-        if (negative)
-            byte[0] ^= 255;
-        bytes.push_back(byte[0]);
-        x = x / integer(256);
-    }
-    std::reverse(bytes.begin(), bytes.end());
-    return bytes;
-}
+const int B_bits = 264;
+const int B_bytes = (B_bits + 7) / 8;
 
 
 // Generates a random psuedoprime using the hash and check method:
@@ -149,7 +134,7 @@ integer HashPrime(std::vector<uint8_t> seed, int length, vector<int> bitmask) {
             // Increment sprout by 1
             for (int i = (int) sprout.size() - 1; i >= 0; --i) {
                 sprout[i]++;
-                if (!sprout[i])
+                if (sprout[i])
                     break;
             }
             picosha2::hash256(sprout.begin(), sprout.end(), hash.begin(), hash.end());
@@ -194,9 +179,7 @@ integer HashPrimeWithLog(std::vector<uint8_t> seed, int length, vector<int> bitm
         integer p(blob);  // p = 7 (mod 8), 2^1023 <= p < 2^1024
         for (int b: bitmask)
             p.set_bit(b, true);
-
-        i++;
-
+        
         if (p.prime())
         {
             std::cout << "iteraions=" << i << std::endl;
@@ -249,12 +232,25 @@ std::tuple<integer, int> HashPrimeReturnsIteration(std::vector<uint8_t> seed, in
     }
 }
 
-std::vector<unsigned char> SerializeForm(form &y, int int_size) {
+std::vector<unsigned char> SerializeForm(form &y, int d_bits)
+{
     y.reduce();
-    std::vector<unsigned char> res = ConvertIntegerToBytes(y.a, int_size);
-    std::vector<unsigned char> b_res = ConvertIntegerToBytes(y.b, int_size);
-    res.insert(res.end(), b_res.begin(), b_res.end());
+    std::vector<unsigned char> res(BQFC_FORM_SIZE);
+    bqfc_serialize(res.data(), y.a.impl, y.b.impl, d_bits);
     return res;
+}
+
+form DeserializeForm(const integer &D, const uint8_t *bytes, size_t size)
+{
+    integer a, b;
+    if (bqfc_deserialize(a.impl, b.impl, D.impl, bytes, size, D.num_bits())) {
+        throw std::runtime_error("Deserializing compressed form failed");
+    }
+    form f = form::from_abd(a, b, D);
+    if (!f.is_reduced()) {
+        throw std::runtime_error("Form is not reduced");
+    }
+    return f;
 }
 
 integer FastPow(uint64_t a, uint64_t b, integer& c) {
@@ -264,11 +260,11 @@ integer FastPow(uint64_t a, uint64_t b, integer& c) {
 }
 
 integer GetB(const integer& D, form &x, form& y) {
-    int int_size = (D.num_bits() + 16) >> 4;
-    std::vector<unsigned char> serialization = SerializeForm(x, int_size);
-    std::vector<unsigned char> serialization_y = SerializeForm(y, int_size);
+    int d_bits = D.num_bits();
+    std::vector<unsigned char> serialization = SerializeForm(x, d_bits);
+    std::vector<unsigned char> serialization_y = SerializeForm(y, d_bits);
     serialization.insert(serialization.end(), serialization_y.begin(), serialization_y.end());
-    return HashPrime(serialization, 264, {263});
+    return HashPrime(serialization, B_bits, {B_bits - 1});
 }
 
 class PulmarkReducer {
@@ -301,28 +297,27 @@ class PulmarkReducer {
 
 form FastPowFormNucomp(form x, integer &D, integer num_iterations, integer &L, PulmarkReducer& reducer)
 {
-    form res = form::identity(D);
-    int D_size = D.impl->_mp_size;
+    if (!mpz_sgn(num_iterations.impl))
+        return form::identity(D);
 
-    while (1) {
-        if (num_iterations.get_bit(0)) {
+    form res = x;
+    int max_size = -D.impl->_mp_size / 2 + 1, i;
+
+    // Do exponentiation by squaring from top bits of exponent to bottom
+    for (i = num_iterations.num_bits() - 2; i >= 0; i--) {
+        nudupl_form(res, res, D, L);
+        if (res.a.impl->_mp_size > max_size) {
+            // Reduce only when 'a' exceeds a half of the discriminant size by
+            // more than one limb
+            reducer.reduce(res);
+        }
+
+        if (num_iterations.get_bit(i)) {
             nucomp_form(res, res, x, D, L);
-            if (res.a.impl->_mp_size > D_size) {
-                // Reduce only when 'a' has more limbs than D
-                reducer.reduce(res);
-            }
-        }
-
-        num_iterations >>= 1;
-        if (num_iterations == 0) {
-            break;
-        }
-
-        nudupl_form(x, x, D, L);
-        if (x.a.impl->_mp_size > D_size) {
-            reducer.reduce(x);
         }
     }
+
+    reducer.reduce(res);
     return res;
 }
 

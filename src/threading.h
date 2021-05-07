@@ -1,7 +1,8 @@
 #ifndef THREADING_H
 #define THREADING_H
 
-#include <boost/align/aligned_alloc.hpp>
+#include "alloc.hpp"
+#include <atomic>
 
 //mp_limb_t is an unsigned integer
 static_assert(sizeof(mp_limb_t)==8, "");
@@ -9,13 +10,28 @@ static_assert(sizeof(mp_limb_t)==8, "");
 static_assert(sizeof(unsigned long int)==8, "");
 static_assert(sizeof(long int)==8, "");
 
+static uint64 get_time_cycles() {
+    // Returns the time in EDX:EAX.
+    uint64 high;
+    uint64 low;
+    asm volatile(
+        "lfence\n\t"
+        "sfence\n\t"
+        "rdtsc\n\t"
+        "sfence\n\t"
+        "lfence\n\t"
+    : "=a"(low), "=d"(high) :: "memory");
+
+    return (high<<32) | low;
+}
+
 #ifdef ENABLE_TRACK_CYCLES
     const int track_cycles_array_size=track_cycles_max_num*track_cycles_num_buckets;
 
     thread_local int track_cycles_next_slot=0;
     thread_local array<uint64, track_cycles_array_size> track_cycles_cycle_counters;
     thread_local array<uint64, track_cycles_array_size> track_cycles_call_counters;
-    thread_local array<const char*, track_cycles_max_num> track_cycles_names;
+    thread_local array<string, track_cycles_max_num> track_cycles_names;
 
     void track_cycles_init() {
         thread_local bool is_init=false;
@@ -32,7 +48,7 @@ static_assert(sizeof(long int)==8, "");
             }
 
             for (int x=0;x<track_cycles_max_num;++x) {
-                track_cycles_names.at(x)=nullptr;
+                track_cycles_names.at(x).clear();
             }
             is_init=true;
         }
@@ -74,26 +90,11 @@ static_assert(sizeof(long int)==8, "");
         uint64 start_time=0;
         bool is_aborted=false;
 
-        static uint64 get_time() {
-            // Returns the time in EDX:EAX.
-            uint64 high;
-            uint64 low;
-            asm volatile(
-                "lfence\n\t"
-                "sfence\n\t"
-                "rdtsc\n\t"
-                "sfence\n\t"
-                "lfence\n\t"
-            : "=a"(low), "=d"(high) :: "memory");
-
-            return (high<<32) | low;
-        }
-
         track_cycles_impl(int t_slot) {
             slot=t_slot;
             assert(slot>=0 && slot<track_cycles_max_num);
 
-            start_time=get_time();
+            start_time=get_time_cycles();
         }
 
         void abort() {
@@ -101,7 +102,7 @@ static_assert(sizeof(long int)==8, "");
         }
 
         ~track_cycles_impl() {
-            uint64 end_time=get_time();
+            uint64 end_time=get_time_cycles();
 
             if (is_aborted) {
                 return;
@@ -133,17 +134,19 @@ static_assert(sizeof(long int)==8, "");
 
     #define TO_STRING(x) TO_STRING_IMPL(x)
 
-    #define TRACK_CYCLES \
+    #define TRACK_CYCLES_NAMED(NAME) \
         track_cycles_init();\
         thread_local int track_cycles_c_slot=-1;\
         if (track_cycles_c_slot==-1) {\
             track_cycles_c_slot=track_cycles_next_slot;\
             ++track_cycles_next_slot;\
             \
-            track_cycles_names.at(track_cycles_c_slot)=__FILE__ ":" TO_STRING(__LINE__);\
+            track_cycles_names.at(track_cycles_c_slot)=(NAME);\
         }\
         track_cycles_impl c_track_cycles_impl(track_cycles_c_slot);
     //
+
+    #define TRACK_CYCLES TRACK_CYCLES_NAMED(__FILE__ ":" TO_STRING(__LINE__))
 
     #define TRACK_CYCLES_ABORT c_track_cycles_impl.abort();
 
@@ -154,51 +157,25 @@ static_assert(sizeof(long int)==8, "");
     #define TRACK_CYCLES_OUTPUT_STATS
 #endif
 
-//use realloc or free to free the memory
-void* alloc_cache_line(size_t bytes) {
-    //round up to the next multiple of 64
-    size_t aligned_bytes=((bytes+63)>>6)<<6;
+template<int d_expected_size, int d_padded_size> struct alignas(64) mpz;
 
-    void* res=boost::alignment::aligned_alloc(64, aligned_bytes); // aligned_alloc(64, aligned_bytes);
-    assert((uint64(res)&63)==0); //must be aligned for correctness
-    return res;
-}
+template<int expected_size_out, int padded_size_out, int expected_size_a, int padded_size_a, int expected_size_b, int padded_size_b>
+void mpz_impl_set_mul(
+    mpz<expected_size_out, padded_size_out>& out,
+    const mpz<expected_size_a, padded_size_a>& a,
+    const mpz<expected_size_b, padded_size_b>& b
+);
 
-void* mp_alloc_func(size_t new_bytes) {
-    void* res=alloc_cache_line(new_bytes);
-    assert((uint64(res)&63)==0); //all memory used by gmp must be cache line aligned
-    return res;
-}
+//gmp can dynamically reallocate this
+//d_padded_size must be a multiple of 8 for avx512 support to work
+template<int d_expected_size, int d_padded_size> struct alignas(64) mpz {
+    static const int expected_size=d_expected_size;
+    static const int padded_size=d_padded_size;
 
-void mp_free_func(void* old_ptr, size_t old_bytes) {
-    //either mp_alloc_func allocated old_ptr and it is 64-aligned, or it points to data in mpz and its address equals 16 modulo 64
-    assert((uint64(old_ptr)&63)==0 || (uint64(old_ptr)&63)==16);
+    static_assert(padded_size%8==0, "");
 
-    if ((uint64(old_ptr)&63)==0) {
-        //mp_alloc_func allocated this, so it can be freed with std::free
-        boost::alignment::aligned_free(old_ptr); //free(old_ptr);
-    } else {
-        //this is part of the mpz struct defined below. it can't be freed, so do nothing
-    }
-}
+    uint64 data[padded_size]; //must be cache line aligned
 
-void* mp_realloc_func(void* old_ptr, size_t old_bytes, size_t new_bytes) {
-    void* res=mp_alloc_func(new_bytes);
-
-    memcpy(res, old_ptr, (old_bytes<new_bytes)? old_bytes : new_bytes);
-
-    mp_free_func(old_ptr, old_bytes);
-
-    return res;
-}
-
-//must call this before calling any gmp functions
-//(the mpz class constructor does not call any gmp functions)
-void init_gmp() {
-    mp_set_memory_functions(mp_alloc_func, mp_realloc_func, mp_free_func);
-}
-
-struct mpz_base {
     //16 bytes
     //int mpz._mp_alloc: number of limbs allocated
     //int mpz._mp_size: abs(_mp_size) is number of limbs in use; 0 if the integer is zero. it is negated if the integer is negative
@@ -206,27 +183,15 @@ struct mpz_base {
     //do not call mpz_swap on this. mpz_swap can be called on other gmp integers
     mpz_struct c_mpz;
 
+    uint64 padding[6];
+
     operator mpz_struct*() { return &c_mpz; }
     operator const mpz_struct*() const { return &c_mpz; }
 
     mpz_struct* _() { return &c_mpz; }
     const mpz_struct* _() const { return &c_mpz; }
-};
-
-//gmp can dynamically reallocate this
-//the number of cache lines used is (padded_size+2)/8 rounded up
-//1 cache line :  6 limbs
-//2 cache lines: 14 limbs
-//3 cache lines: 22 limbs
-//4 cache lines: 30 limbs
-//5 cache lines: 38 limbs
-template<int d_expected_size, int d_padded_size> struct alignas(64) mpz : public mpz_base {
-    static const int expected_size=d_expected_size;
-    static const int padded_size=d_padded_size;
 
     static_assert(expected_size>=1 && expected_size<=padded_size, "");
-
-    uint64 data[padded_size]; //must not be cache line aligned
 
     bool was_reallocated() const {
         return c_mpz._mp_d!=data;
@@ -242,7 +207,7 @@ template<int d_expected_size, int d_padded_size> struct alignas(64) mpz : public
         assert((uint64(this)&63)==0);
 
         //mp_free_func uses this to decide whether to free or not
-        assert((uint64(c_mpz._mp_d)&63)==16);
+        assert((uint64(c_mpz._mp_d)&63)==0);
     }
 
     ~mpz() {
@@ -253,7 +218,7 @@ template<int d_expected_size, int d_padded_size> struct alignas(64) mpz : public
 
         //if c_mpz.data wasn't reallocated, it has to point to this instance's data and not some other instance's data
         //if mpz_swap was used, this might be violated
-        assert((uint64(c_mpz._mp_d)&63)==0 || c_mpz._mp_d==data);
+        assert((uint64(c_mpz._mp_d)&63)==16 || c_mpz._mp_d==data);
         mpz_clear(&c_mpz);
     }
 
@@ -275,16 +240,6 @@ template<int d_expected_size, int d_padded_size> struct alignas(64) mpz : public
         return *this;
     }
 
-    /*mpz& operator=(const mpz_base& t) {
-        mpz_set(*this, t);
-        return *this;
-    }
-
-    mpz& operator=(mpz_base&& t) {
-        mpz_set(*this, t); //do not use mpz_swap
-        return *this;
-    }*/
-
     mpz& operator=(uint64 i) {
         mpz_set_ui(*this, i);
         return *this;
@@ -302,25 +257,28 @@ template<int d_expected_size, int d_padded_size> struct alignas(64) mpz : public
     }
 
     USED string to_string() const {
-        char* res_char=mpz_get_str(nullptr, 16, *this);
-        string res_string = "0x";
-        res_string+=res_char;
+        string res_string="0x";
+        res_string.resize(res_string.size() + mpz_sizeinbase(*this, 16) + 2);
 
-        if (res_string.substr(0, 3) == "0x-") {
+        mpz_get_str(&(res_string[2]), 16, *this);
+
+        if (res_string.substr(0, 3)=="0x-") {
             res_string.at(0)='-';
             res_string.at(1)='0';
             res_string.at(2)='x';
         }
 
-        free(res_char);
-        return res_string;
+        //get rid of the null terminator and everything after it
+        return res_string.c_str();
     }
 
     USED string to_string_dec() const {
-        char* res_char=mpz_get_str(nullptr, 10, *this);
-        string res_string=res_char;
-        free(res_char);
-        return res_string;
+        string res_string;
+        res_string.resize(mpz_sizeinbase(*this, 10));
+
+        mpz_get_str(&(res_string[0]), 10, *this);
+
+        return res_string.c_str();
     }
 
     //sets *this to a+b
@@ -359,8 +317,14 @@ template<int d_expected_size, int d_padded_size> struct alignas(64) mpz : public
         return *this;
     }
 
-    void set_mul(const mpz_struct* a, const mpz_struct* b) {
+    /*void set_mul(const mpz_struct* a, const mpz_struct* b) {
+        todo
         mpz_mul(*this, a, b);
+    }*/
+
+    template<int expected_size_a, int padded_size_a, int expected_size_b, int padded_size_b>
+    void set_mul(const mpz<expected_size_a, padded_size_a>& a, const mpz<expected_size_b, padded_size_b>& b) {
+        mpz_impl_set_mul(*this, a, b);
     }
 
     void set_mul(const mpz_struct* a, int64 b) {
@@ -398,6 +362,7 @@ template<int d_expected_size, int d_padded_size> struct alignas(64) mpz : public
 
     //*this+=a*b
     void set_add_mul(const mpz_struct* a, const mpz_struct* b) {
+        todo
         mpz_addmul(*this, a, b);
     }
 
@@ -407,6 +372,7 @@ template<int d_expected_size, int d_padded_size> struct alignas(64) mpz : public
 
     //*this-=a*b
     void set_sub_mul(const mpz_struct* a, const mpz_struct* b) {
+        todo
         mpz_submul(*this, a, b);
     }
 
@@ -572,35 +538,6 @@ template<int d_expected_size, int d_padded_size> struct alignas(64) mpz : public
     }
 };
 
-template<class type> struct cache_line_ptr {
-    type* ptr=nullptr;
-
-    cache_line_ptr() {}
-    cache_line_ptr(cache_line_ptr& t)=delete;
-    cache_line_ptr(cache_line_ptr&& t) { swap(ptr, t.ptr); }
-
-    cache_line_ptr& operator=(cache_line_ptr& t)=delete;
-    cache_line_ptr& operator=(cache_line_ptr&& t) { swap(ptr, t.ptr); }
-
-    ~cache_line_ptr() {
-        if (ptr) {
-            ptr->~type();
-            boost::alignment::aligned_free(ptr); // wjb free(ptr);
-            ptr=nullptr;
-        }
-    }
-
-    type& operator*() const { return *ptr; }
-    type* operator->() const { return ptr; }
-};
-
-template<class type, class... arg_types> cache_line_ptr<type> make_cache_line(arg_types&&... args) {
-    cache_line_ptr<type> res;
-    res.ptr=(type*)alloc_cache_line(sizeof(type));
-    new(res.ptr) type(forward<arg_types>(args)...);
-    return res;
-}
-
 template<bool is_write, class type> void prefetch(const type& p) {
     //write prefetching lowers performance but read prefetching increases it
     if (is_write) return;
@@ -613,19 +550,13 @@ template<bool is_write, class type> void prefetch(const type& p) {
 template<class type> void prefetch_write(const type& p) { prefetch<true>(p); }
 template<class type> void prefetch_read(const type& p) { prefetch<false>(p); }
 
-void memory_barrier() {
-    asm volatile( "" ::: "memory" );
-}
-
 struct alignas(64) thread_counter {
-    uint64 counter_value=0; //updated atomically since only one thread can write to it
-    uint64 error_flag=0;
+    std::atomic<uint64> counter_value{0}; //updated atomically since only one thread can write to it
+    std::atomic<bool> error_flag{false};
 
     void reset() {
-        memory_barrier();
         counter_value=0;
-        error_flag=0;
-        memory_barrier();
+        error_flag = false;
     }
 
     thread_counter() {
@@ -661,13 +592,11 @@ struct thread_state {
             //print( "raise_error", is_slave );
         //}
 
-        memory_barrier();
-        this_counter().error_flag=1;
-        other_counter().error_flag=1;
-        memory_barrier();
+        this_counter().error_flag = true;
+        other_counter().error_flag = true;
     }
 
-    const uint64 v() {
+    uint64 v() {
         return this_counter().counter_value;
     }
 
@@ -678,11 +607,9 @@ struct thread_state {
             return true;
         }
 
-        memory_barrier();
-
         uint64 spin_counter=0;
         while (other_counter().counter_value < t_v) {
-            if (this_counter().error_flag || other_counter().error_flag) {
+            if (this_counter().error_flag.load() || other_counter().error_flag.load()) {
                 raise_error();
                 break;
             }
@@ -697,10 +624,7 @@ struct thread_state {
             }
 
             ++spin_counter;
-            memory_barrier();
         }
-
-        memory_barrier();
 
         if (!(this_counter().error_flag)) {
             last_fence=t_v;
@@ -720,8 +644,6 @@ struct thread_state {
             return true;
         }
 
-        memory_barrier(); //wait for all writes to finish (on x86 this doesn't do anything but the compiler still needs it)
-
         assert(t_v>=v());
 
         if (this_counter().error_flag) {
@@ -730,7 +652,6 @@ struct thread_state {
 
         this_counter().counter_value=t_v;
 
-        memory_barrier(); //want the counter writes to be low latency so prevent the compiler from caching it
         return !(this_counter().error_flag);
     }
 
@@ -745,17 +666,15 @@ struct thread_state {
     /*void wait_for_error_to_be_cleared() {
         assert(is_slave && enable_threads);
         while (this_counter().error_flag) {
-            memory_barrier();
+            std::this_thread::yield();
         }
     }
 
     void clear_error() {
         assert(!is_slave);
 
-        memory_barrier();
-        this_counter().error_flag=0;
-        other_counter().error_flag=0;
-        memory_barrier();
+        this_counter().error_flag = false;
+        other_counter().error_flag = false;
     }*/
 };
 
@@ -860,7 +779,8 @@ template<class mpz_type> bool gcd_unsigned(
     data.threshold=(uint64*)&threshold[0];
 
     data.uv_counter_start=c_thread_state.counter_start+counter_start_delta+1;
-    data.out_uv_counter_addr=&(c_thread_state.this_counter().counter_value);
+    // TODO: come up with something better here
+    data.out_uv_counter_addr=reinterpret_cast<uint64_t*>(&(c_thread_state.this_counter().counter_value));
     data.out_uv_addr=(uint64*)&(c_results.uv_entries[1]);
     data.iter=-1;
     data.a_end_index=(a_limbs==0)? 0 : a_limbs-1;
@@ -869,12 +789,9 @@ template<class mpz_type> bool gcd_unsigned(
         assert((uint64(data.out_uv_addr)&63)==0); //should be cache line aligned
     }
 
-    memory_barrier();
     int error_code=hasAVX2()?
-	    asm_code::asm_avx2_func_gcd_unsigned(&data):
-	    asm_code::asm_cel_func_gcd_unsigned(&data);
-
-    memory_barrier();
+        asm_code::asm_avx2_func_gcd_unsigned(&data):
+        asm_code::asm_cel_func_gcd_unsigned(&data);
 
     if (error_code!=0) {
         c_thread_state.raise_error();
