@@ -85,6 +85,8 @@ integer HashPrimeFast(std::vector<uint8_t> seed, int length, vector<int> bitmask
     std::vector<uint8_t> sprout = seed;  // seed plus nonce
 
     int i = 0;
+    // int counter = 0;
+    // int result = 0;
     while (true) {  // While prime is not found
         blob.resize(0);
         // cuz sha256 returns 32 bytes
@@ -96,7 +98,13 @@ integer HashPrimeFast(std::vector<uint8_t> seed, int length, vector<int> bitmask
                 if (!sprout[i])
                     break;
             }
+
+            // std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
             picosha2::hash256(sprout.begin(), sprout.end(), hash.begin(), hash.end());
+            // std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+            // counter += 1;
+            // result += std::chrono::duration_cast<std::chrono::nanoseconds> (end - begin).count();
+            
             blob.insert(blob.end(), hash.begin(),
                 std::min(hash.end(), hash.begin() + length / 8 - blob.size()));
         }
@@ -106,10 +114,12 @@ integer HashPrimeFast(std::vector<uint8_t> seed, int length, vector<int> bitmask
             p.set_bit(b, true);
 
         i++;
+        // std::cout << iteration << "   " << i << std::endl;
 
         if (i == iteration) {
             if (p.prime()) {
-                std::cout << "iteraions=" << i << std::endl;
+                // std::cout << "iteraions=" << i << std::endl;
+                // std::cout << "Avg: " << result / counter << std::endl;
                 return p;
             } else {
                 std::stringstream ss;
@@ -202,6 +212,8 @@ std::tuple<integer, int> HashPrimeReturnsIteration(std::vector<uint8_t> seed, in
     std::vector<uint8_t> sprout = seed;  // seed plus nonce
 
     int i = 0;
+    // int counter = 0;
+    // int result = 0;
     while (true) {  // While prime is not found
         blob.resize(0);
         // cuz sha256 returns 32 bytes
@@ -213,7 +225,12 @@ std::tuple<integer, int> HashPrimeReturnsIteration(std::vector<uint8_t> seed, in
                 if (!sprout[i])
                     break;
             }
+            // std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
             picosha2::hash256(sprout.begin(), sprout.end(), hash.begin(), hash.end());
+            // std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+            // counter += 1;
+            // result += std::chrono::duration_cast<std::chrono::nanoseconds> (end - begin).count();
+            // std::cout << "hash256: " << std::chrono::duration_cast<std::chrono::nanoseconds> (end - begin).count() << "ns" << std::endl;
             blob.insert(blob.end(), hash.begin(),
                 std::min(hash.end(), hash.begin() + length / 8 - blob.size()));
         }
@@ -226,6 +243,7 @@ std::tuple<integer, int> HashPrimeReturnsIteration(std::vector<uint8_t> seed, in
 
         if (p.prime())
         {
+            // std::cout << "Avg: " << result / counter << std::endl;
             return std::make_tuple(p, i);
         }
     }
