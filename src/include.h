@@ -48,9 +48,9 @@ typedef __int128 int128;
 #include <gmpxx.h>
 #include <chrono>
 
-#define LOG_TIME_START(s) std::chrono::steady_clock::time_point begin_##s = std::chrono::steady_clock::now();
-#define LOG_TIME_END(s) std::chrono::steady_clock::time_point end_##s = std::chrono::steady_clock::now(); \
-    std::cout << std::chrono::duration_cast<std::chrono::milliseconds> (end_##s - begin_##s).count() << ",";
+#define PRINT_TIME_IN_JSON_START(field_name) std::chrono::steady_clock::time_point begin_##field_name = std::chrono::steady_clock::now();
+#define PRINT_TIME_IN_JSON_END(field_name) std::chrono::steady_clock::time_point end_##field_name = std::chrono::steady_clock::now(); \
+    std::cout << "\"" << #field_name << "\",\"" << std::chrono::duration_cast<std::chrono::milliseconds> (end_##field_name - begin_##field_name).count() << "ms\",";
 
 using namespace std;
 using namespace generic;

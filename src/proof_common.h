@@ -58,19 +58,19 @@ integer HashPrimeForWorker(std::vector<uint8_t> seed, int length, vector<int> bi
         #ifdef __EMSCRIPTEN__
         if (i == iteration) {
             if (p.prime()) {
-                std::cout << "iteraions=" << i << std::endl;
+                std::cout << "iterations=" << i << std::endl;
                 return p;
             } else {
                 std::stringstream ss;
-                ss << "iteraions=" << iteration << "is not a prime.";
+                ss << "iterations=" << iteration << "is not a prime.";
                 throw runtime_error(ss.str());;
             }
         } 
         #else
         if (p.prime())
         {
-            // std::cout << "prime_i=" << i << ",";
-            std::cout << i << ",";
+            std::cout << "\"" << "iterations" << "\":\"" << i << "\",";
+            std::cout << "\"" << "prime" << "\":\"" << p.to_string() << "\",";
             return p;
         }
         #endif
@@ -114,8 +114,7 @@ integer HashPrimeFast(std::vector<uint8_t> seed, int length, vector<int> bitmask
             p.set_bit(b, true);
 
         i++;
-        // std::cout << iteration << "   " << i << std::endl;
-
+        
         if (i == iteration) {
             if (p.prime()) {
                 // std::cout << "iteraions=" << i << std::endl;

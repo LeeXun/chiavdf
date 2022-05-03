@@ -108,9 +108,9 @@ std::vector<uint8_t> ProveSlow(std::vector<uint8_t>& challenge_hash, int discrim
 
 std::tuple<integer, integer, integer, integer, integer> ProveSlowForWorker(std::vector<uint8_t>& challenge_hash, int discriminant_size_bits,
                            uint64_t num_iterations) {
-    LOG_TIME_START(D)
+    PRINT_TIME_IN_JSON_START(time_of_d)
     integer D = CreateDiscriminantForWorker(challenge_hash, discriminant_size_bits);
-    LOG_TIME_END(D)
+    PRINT_TIME_IN_JSON_END(time_of_d)
     integer L = root(-D, 4);
     PulmarkReducer reducer;
     form y = form::generator(D);
@@ -120,7 +120,7 @@ std::tuple<integer, integer, integer, integer, integer> ProveSlowForWorker(std::
 
     ApproximateParameters(num_iterations, l, k);
 
-    LOG_TIME_START(y)
+    PRINT_TIME_IN_JSON_START(time_of_y)
     for (int i = 0; i < num_iterations; i++) {
         if (i % (k * l) == 0) {
             intermediates.push_back(y);
@@ -128,13 +128,13 @@ std::tuple<integer, integer, integer, integer, integer> ProveSlowForWorker(std::
         nudupl_form(y, y, D, L);
         reducer.reduce(y);
     }
-    LOG_TIME_END(y)
+    PRINT_TIME_IN_JSON_END(time_of_y)
 
     form x = form::generator(D);
     // set timer for proving
-    LOG_TIME_START(proof)
+    PRINT_TIME_IN_JSON_START(time_of_proof)
     form proof = GenerateWesolowski(y, x, D, reducer, intermediates, num_iterations, k, l);
-    LOG_TIME_END(proof)
+    PRINT_TIME_IN_JSON_END(time_of_proof)
 
     std::vector<uint8_t> result = SerializeForm(y, int_size);
     std::vector<uint8_t> proof_bytes = SerializeForm(proof, int_size);
