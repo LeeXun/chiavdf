@@ -50,7 +50,7 @@ typedef __int128 int128;
 
 #define PRINT_TIME_IN_JSON_START(field_name) std::chrono::steady_clock::time_point begin_##field_name = std::chrono::steady_clock::now();
 #define PRINT_TIME_IN_JSON_END(field_name) std::chrono::steady_clock::time_point end_##field_name = std::chrono::steady_clock::now(); \
-    std::cout << "\"" << #field_name << "\",\"" << std::chrono::duration_cast<std::chrono::milliseconds> (end_##field_name - begin_##field_name).count() << "ms\",";
+    std::cout << "\"" << #field_name << "\":\"" << std::chrono::duration_cast<std::chrono::milliseconds> (end_##field_name - begin_##field_name).count() << "ms\",";
 
 using namespace std;
 using namespace generic;

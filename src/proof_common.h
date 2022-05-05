@@ -69,8 +69,7 @@ integer HashPrimeForWorker(std::vector<uint8_t> seed, int length, vector<int> bi
         #else
         if (p.prime())
         {
-            std::cout << "\"" << "iterations" << "\":\"" << i << "\",";
-            std::cout << "\"" << "prime" << "\":\"" << p.to_string() << "\",";
+            std::cout << "\"" << "prime_test_iteration" << "\":\"" << i << "\",";
             return p;
         }
         #endif
