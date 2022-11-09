@@ -27,16 +27,18 @@ uint64_t GetBlock(uint64_t i, uint64_t k, uint64_t T, integer& B) {
     return res_vector[0];
 }
 
-form GenerateWesolowski(form &y, form &x_init, 
-                        integer &D, PulmarkReducer& reducer, 
-                        std::vector<form>& intermediates,
-                        uint64_t num_iterations, 
+form GenerateWesolowski(form &y, form &x_init,
+                        integer &D, PulmarkReducer& reducer,
+                        std::vector<form> const& intermediates,
+                        uint64_t num_iterations,
                         uint64_t k, uint64_t l) {
     integer B = GetB(D, x_init, y);
     integer L=root(-D, 4);
 
     uint64_t k1 = k / 2;
     uint64_t k0 = k - k1;
+    assert(k > 0);
+    assert(l > 0);
 
     form x = form::identity(D);
 
@@ -47,12 +49,10 @@ form GenerateWesolowski(form &y, form &x_init,
         for (uint64_t i = 0; i < (1 << k); i++)
             ys[i] = form::identity(D);
 
-        form *tmp;
-        for (uint64_t i = 0; i < ceil(1.0 * num_iterations / (k * l)); i++) {
+        for (uint64_t i = 0; i < ceil(double(num_iterations)  / (k * l)); i++) {
             if (num_iterations >= k * (i * l + j + 1)) {
                 uint64_t b = GetBlock(i*l + j, k, num_iterations, B);
-                tmp = &intermediates[i];
-                nucomp_form(ys[b], ys[b], *tmp, D, L);
+                nucomp_form(ys[b], ys[b], intermediates[i], D, L);
             }
         }
         for (uint64_t b1 = 0; b1 < (1 << k1); b1++) {
@@ -77,31 +77,33 @@ form GenerateWesolowski(form &y, form &x_init,
     return x;
 }
 
-std::vector<uint8_t> ProveSlow(std::vector<uint8_t>& challenge_hash, int discriminant_size_bits,
-                           uint64_t num_iterations) {
-    integer D = CreateDiscriminant(challenge_hash, discriminant_size_bits);
+std::vector<uint8_t> ProveSlow(integer& D, form& x, uint64_t num_iterations) {
     integer L = root(-D, 4);
     PulmarkReducer reducer;
-    form y = form::generator(D);
-    std::vector<form> intermediates;
+    form y = form::from_abd(x.a, x.b, D);
+    int d_bits = D.num_bits();
+
     int k, l;
-    int int_size = (D.num_bits() + 16) >> 4;
-
     ApproximateParameters(num_iterations, l, k);
+    if (k <= 0) k = 1;
+    if (l <= 0) l = 1;
+    int const kl = k * l;
 
-    for (int i = 0; i < num_iterations; i++) {
-        if (i % (k * l) == 0) {
-            intermediates.push_back(y);
+    uint64_t const size_vec = (num_iterations + kl - 1) / kl;
+    std::vector<form> intermediates(size_vec);
+    form* cursor = intermediates.data();
+    for (uint64_t i = 0; i < num_iterations; i++) {
+        if (i % kl == 0) {
+            *cursor = y;
+            ++cursor;
         }
         nudupl_form(y, y, D, L);
         reducer.reduce(y);
     }
 
-    form x = form::generator(D);
     form proof = GenerateWesolowski(y, x, D, reducer, intermediates, num_iterations, k, l);
-
-    std::vector<uint8_t> result = SerializeForm(y, int_size);
-    std::vector<uint8_t> proof_bytes = SerializeForm(proof, int_size);
+    std::vector<uint8_t> result = SerializeForm(y, d_bits);
+    std::vector<uint8_t> proof_bytes = SerializeForm(proof, d_bits);
     result.insert(result.end(), proof_bytes.begin(), proof_bytes.end());
     return result;
 }

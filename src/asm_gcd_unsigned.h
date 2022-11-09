@@ -278,7 +278,7 @@ struct asm_integer {
     //-first calculate ~(c*d)
     //-then calculate a*b+(~(c*d))+1
     void mul_add(
-        reg_alloc regs, asm_integer a, reg_scalar b, asm_integer c, bool invert_output, bool carry_in_is_1
+        const reg_alloc& regs, asm_integer a, reg_scalar b, asm_integer c, bool invert_output, bool carry_in_is_1
     ) {
         EXPAND_MACROS_SCOPE;
 
@@ -470,8 +470,8 @@ void gcd_unsigned(
 #else
         for (int end_index=0;end_index<int_size;++end_index) {
             int size=end_index+1;
-            
-            int mapped_size=size; 
+
+            int mapped_size=size;
             while (mapped_size==0 || mapped_size%4!=0) {
                 ++mapped_size;
             }

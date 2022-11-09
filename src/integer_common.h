@@ -1,6 +1,8 @@
 #ifndef INTEGER_COMMON_H
 #define INTEGER_COMMON_H
 
+#include "primetest.h"
+
 //note: gmp already has c++ bindings so could have just used those. oh well
 
 //const bool output_stats=false;
@@ -121,6 +123,7 @@ int mpz_num_bits_upper_bound(mpz_struct* v) {
 
 static bool allow_integer_constructor=false; //don't want static integers because they use the wrong allocator
 
+//16 bytes
 struct integer {
     mpz_struct impl[1];
 
@@ -165,15 +168,27 @@ struct integer {
         mpz_import(impl, data.size(), -1, 8, 0, 0, &data[0]);
     }
 
+    integer(const uint8_t *bytes, size_t size) {
+        mpz_init(impl);
+        mpz_import(impl, size, 1, 1, 1, 0, bytes);
+    }
+
     //lsb first
     vector<uint64> to_vector() const {
         vector<uint64> res;
         res.resize(mpz_sizeinbase(impl, 2)/64 + 1, 0);
 
         size_t count;
-        mpz_export(&res[0], &count, -1, 8, 0, 0, impl);
+        mpz_export(res.data(), &count, -1, 8, 0, 0, impl);
         res.resize(count);
 
+        return res;
+    }
+
+    vector<uint8_t> to_bytes() const {
+        vector<uint8_t> res((mpz_sizeinbase(impl, 2) + 7) / 8);
+
+        mpz_export(res.data(), NULL, 1, 1, 0, 0, impl);
         return res;
     }
 
@@ -211,9 +226,10 @@ struct integer {
     }
 
     USED string to_string() const {
-        char* res_char=mpz_get_str(nullptr, 16, impl);
         string res_string="0x";
-        res_string+=res_char;
+        res_string.resize(res_string.size() + mpz_sizeinbase(impl, 16) + 2);
+
+        mpz_get_str(&(res_string[2]), 16, impl);
 
         if (res_string.substr(0, 3)=="0x-") {
             res_string.at(0)='-';
@@ -221,15 +237,17 @@ struct integer {
             res_string.at(2)='x';
         }
 
-        free(res_char);
-        return res_string;
+        //get rid of the null terminator and everything after it
+        return res_string.c_str();
     }
 
     string to_string_dec() const {
-        char* res_char=mpz_get_str(nullptr, 10, impl);
-        string res_string=res_char;
-        free(res_char);
-        return res_string;
+        string res_string;
+        res_string.resize(mpz_sizeinbase(impl, 10));
+
+        mpz_get_str(&(res_string[0]), 10, impl);
+
+        return res_string.c_str();
     }
 
     integer& operator+=(const integer& t) {
@@ -327,7 +345,7 @@ struct integer {
     }
 
     bool prime() const {
-        return mpz_probab_prime_p(impl, 50)!=0;
+        return is_prime_bpsw(impl) != 0;
     }
 
     bool operator<(const integer& t) const {

@@ -23,20 +23,32 @@ limitations under the License.
 
 #include "ClassGroup.h"
 
+#ifdef __has_attribute
+# define HAS_ATTRIBUTE(x) __has_attribute(x)
+#else
+# define HAS_ATTRIBUTE(x) 0
+#endif
+
+#if HAS_ATTRIBUTE(weak)
+# define WEAK __attribute__((weak))
+#else
+# define WEAK
+#endif
+
 extern "C" {
 int has_lzcnt_hard();
 unsigned int lzcnt64_soft(unsigned long long x);
-unsigned int lzcnt64_hard(unsigned long long x);
+unsigned int lzcnt64_hard(unsigned long long x) WEAK;
 }
 
 /** constants utilized in reduction algorithm */
 namespace {
 const int_fast64_t THRESH{1ul << 31};
 const int_fast64_t EXP_THRESH{31};
-} 
+}
 
 /**
- * @brief The Reducer class that does custom reduce operation for VDF 
+ * @brief The Reducer class that does custom reduce operation for VDF
  * repeated squaring algorithm. The implementation is based on
  * Akashnil VDF competition entry and further optimized for speed.
  */
@@ -44,14 +56,14 @@ class alignas(64) Reducer {
 public:
   /**
    * @brief Reducer - constructs by using reference into cg context.
-   */  
+   */
   Reducer(ClassGroupContext &ctx_) : ctx(ctx_) {}
 
   ~Reducer() {}
 
   /**
    * @brief run - runs reduction algorithm for cg context params
-   */  
+   */
   inline void run() {
     while (!isReduced()) {
       int_fast64_t a, b, c;
@@ -81,9 +93,9 @@ public:
         mpz_mul_si(ctx.fab, ctx.b, u * w);
         mpz_mul_si(ctx.fac, ctx.c, w * w);
 
-        mpz_mul_si(ctx.fba, ctx.a, u * v << 1);
+        mpz_mul_si(ctx.fba, ctx.a, uint_fast64_t(u * v) << 1);
         mpz_mul_si(ctx.fbb, ctx.b, u * x + v * w);
-        mpz_mul_si(ctx.fbc, ctx.c, w * x << 1);
+        mpz_mul_si(ctx.fbc, ctx.c, uint_fast64_t(w * x) << 1);
 
         mpz_mul_si(ctx.fca, ctx.a, v * v);
         mpz_mul_si(ctx.fcb, ctx.b, v * x);
@@ -128,7 +140,7 @@ bool bLZCHasHW=false;
         bLZCHasHW=has_lzcnt_hard();
         bLZCChecked=true;
     }
-    
+
     int_fast64_t lg2;
 
     if(bLZCHasHW)
@@ -206,7 +218,7 @@ bool bLZCHasHW=false;
       // a = c
       a = c;
       // b = -b + 2cs
-      b = -b + (c * s << 1);
+      b = -b + (uint_fast64_t(c * s) << 1);
       // c = a + cs^2 - bs
       c = a_ - s * (b_ - c * s);
 

@@ -131,9 +131,21 @@ struct form {
     static form generator(const integer& d) {
         return from_abd(integer(2), integer(1), d);
     }
-    
+
     void reduce() {
         ::reduce(a, b, c);
+    }
+
+    bool is_reduced() {
+        int a_cmp_c = mpz_cmp(a.impl, c.impl);
+
+        // a <= c, and if a == c, then b >= 0
+        if (a_cmp_c < 0 || (a_cmp_c == 0 && mpz_sgn(b.impl) >= 0)) {
+            // -a < b <= a
+            if (mpz_cmpabs(a.impl, b.impl) > 0 || mpz_cmp(a.impl, b.impl) == 0)
+                return true;
+        }
+        return false;
     }
 
     form inverse() const {
