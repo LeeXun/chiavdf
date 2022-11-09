@@ -6,126 +6,19 @@
 const int B_bits = 264;
 const int B_bytes = (B_bits + 7) / 8;
 
-
 // Generates a random psuedoprime using the hash and check method:
 // Randomly chooses x with bit-length `length`, then applies a mask
 //   (for b in bitmask) { x |= (1 << b) }.
 // Then return x if it is a psuedoprime, otherwise repeat.
-integer HashPrimeForWorker(std::vector<uint8_t> seed, int length, vector<int> bitmask, int iteration = -1) {
-    assert (length % 8 == 0);
-    std::vector<uint8_t> hash(picosha2::k_digest_size);  // output of sha256
-    std::vector<uint8_t> blob;  // output of 1024 bit hash expansions
-    std::vector<uint8_t> sprout = seed;  // seed plus nonce
-
-    int i = 0;
-    while (true) {  // While prime is not found
-        blob.resize(0);
-        // cuz sha256 returns 32 bytes
-        // repeat it to fill blob
-        while ((int) blob.size() * 8 < length) {
-            // Increment sprout by 1
-            for (int i = (int) sprout.size() - 1; i >= 0; --i) {
-                sprout[i]++;
-                if (!sprout[i])
-                    break;
-            }
-            picosha2::hash256(sprout.begin(), sprout.end(), hash.begin(), hash.end());
-            blob.insert(blob.end(), hash.begin(),
-                std::min(hash.end(), hash.begin() + length / 8 - blob.size()));
-        }
-        assert ((int) blob.size() * 8 == length);
-        integer p(blob);  // p = 7 (mod 8), 2^1023 <= p < 2^1024
-        for (int b: bitmask)
-            p.set_bit(b, true);
-
-        i++;
-
-        #ifdef __EMSCRIPTEN__
-        if (i == iteration) {
-            if (p.prime()) {
-                std::cout << "iteraions=" << i << std::endl;
-                return p;
-            } else {
-                std::stringstream ss;
-                ss << "iteraions=" << iteration << "is not a prime.";
-                throw runtime_error(ss.str());;
-            }
-        } 
-        #else
-        if (p.prime())
-        {
-            // std::cout << "prime_i=" << i << ",";
-            std::cout << i << ",";
-            return p;
-        }
-        #endif
-        
-    }
-}
-
-integer HashPrimeFast(std::vector<uint8_t> seed, int length, vector<int> bitmask, int iteration = -1) {
-    assert (length % 8 == 0);
-    std::vector<uint8_t> hash(picosha2::k_digest_size);  // output of sha256
-    std::vector<uint8_t> blob;  // output of 1024 bit hash expansions
-    std::vector<uint8_t> sprout = seed;  // seed plus nonce
-
-    int i = 0;
-    // int counter = 0;
-    // int result = 0;
-    while (true) {  // While prime is not found
-        blob.resize(0);
-        // cuz sha256 returns 32 bytes
-        // repeat it to fill blob
-        while ((int) blob.size() * 8 < length) {
-            // Increment sprout by 1
-            for (int i = (int) sprout.size() - 1; i >= 0; --i) {
-                sprout[i]++;
-                if (!sprout[i])
-                    break;
-            }
-
-            // std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-            picosha2::hash256(sprout.begin(), sprout.end(), hash.begin(), hash.end());
-            // std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-            // counter += 1;
-            // result += std::chrono::duration_cast<std::chrono::nanoseconds> (end - begin).count();
-            
-            blob.insert(blob.end(), hash.begin(),
-                std::min(hash.end(), hash.begin() + length / 8 - blob.size()));
-        }
-        assert ((int) blob.size() * 8 == length);
-        integer p(blob);  // p = 7 (mod 8), 2^1023 <= p < 2^1024
-        for (int b: bitmask)
-            p.set_bit(b, true);
-
-        i++;
-        // std::cout << iteration << "   " << i << std::endl;
-
-        if (i == iteration) {
-            if (p.prime()) {
-                // std::cout << "iteraions=" << i << std::endl;
-                // std::cout << "Avg: " << result / counter << std::endl;
-                return p;
-            } else {
-                std::stringstream ss;
-                ss << "iteraions=" << iteration << "is not a prime.";
-                throw runtime_error(ss.str());;
-            }
-        }
-        
-    }
-}
-
-// Generates a random psuedoprime using the hash and check method:
-// Randomly chooses x with bit-length `length`, then applies a mask
-//   (for b in bitmask) { x |= (1 << b) }.
-// Then return x if it is a psuedoprime, otherwise repeat.
+// leehsun: We modify HashPrime to return the number of iterations to find the prime.
+// If skip_to_iteration != -1, then HashPrime will keep hashing to skip_to_iteration
+// and only test the prime number for once.
 integer HashPrime(std::vector<uint8_t> seed, int length, vector<int> bitmask) {
     assert (length % 8 == 0);
     std::vector<uint8_t> hash(picosha2::k_digest_size);  // output of sha256
     std::vector<uint8_t> blob;  // output of 1024 bit hash expansions
     std::vector<uint8_t> sprout = seed;  // seed plus nonce
-
+    
     while (true) {  // While prime is not found
         blob.resize(0);
         // cuz sha256 returns 32 bytes
@@ -145,94 +38,11 @@ integer HashPrime(std::vector<uint8_t> seed, int length, vector<int> bitmask) {
         integer p(blob);  // p = 7 (mod 8), 2^1023 <= p < 2^1024
         for (int b: bitmask)
             p.set_bit(b, true);
-
-        if (p.prime())
-        {
-            return p;
-        }
-    }
-}
-
-integer HashPrimeWithLog(std::vector<uint8_t> seed, int length, vector<int> bitmask, int iteration = -1) {
-    assert (length % 8 == 0);
-    std::vector<uint8_t> hash(picosha2::k_digest_size);  // output of sha256
-    std::vector<uint8_t> blob;  // output of 1024 bit hash expansions
-    std::vector<uint8_t> sprout = seed;  // seed plus nonce
-
-    int i = 0;
-    while (true) {  // While prime is not found
-        blob.resize(0);
-        // cuz sha256 returns 32 bytes
-        // repeat it to fill blob
-        while ((int) blob.size() * 8 < length) {
-            // Increment sprout by 1
-            for (int i = (int) sprout.size() - 1; i >= 0; --i) {
-                sprout[i]++;
-                if (!sprout[i])
-                    break;
-            }
-            picosha2::hash256(sprout.begin(), sprout.end(), hash.begin(), hash.end());
-            blob.insert(blob.end(), hash.begin(),
-                std::min(hash.end(), hash.begin() + length / 8 - blob.size()));
-        }
-        assert ((int) blob.size() * 8 == length);
-        integer p(blob);  // p = 7 (mod 8), 2^1023 <= p < 2^1024
-        for (int b: bitmask)
-            p.set_bit(b, true);
-
-        i++;
-
-        // TODO: add this to all functions
         // Force the number to be odd
         p.set_bit(0, true);
-        if (p.prime())
-        {
-            std::cout << "iteraions=" << i << std::endl;
+
+        if (p.prime()) {
             return p;
-        }
-    }
-}
-
-std::tuple<integer, int> HashPrimeReturnsIteration(std::vector<uint8_t> seed, int length, vector<int> bitmask, int iteration = -1) {
-    assert (length % 8 == 0);
-    std::vector<uint8_t> hash(picosha2::k_digest_size);  // output of sha256
-    std::vector<uint8_t> blob;  // output of 1024 bit hash expansions
-    std::vector<uint8_t> sprout = seed;  // seed plus nonce
-
-    int i = 0;
-    // int counter = 0;
-    // int result = 0;
-    while (true) {  // While prime is not found
-        blob.resize(0);
-        // cuz sha256 returns 32 bytes
-        // repeat it to fill blob
-        while ((int) blob.size() * 8 < length) {
-            // Increment sprout by 1
-            for (int i = (int) sprout.size() - 1; i >= 0; --i) {
-                sprout[i]++;
-                if (!sprout[i])
-                    break;
-            }
-            // std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-            picosha2::hash256(sprout.begin(), sprout.end(), hash.begin(), hash.end());
-            // std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-            // counter += 1;
-            // result += std::chrono::duration_cast<std::chrono::nanoseconds> (end - begin).count();
-            // std::cout << "hash256: " << std::chrono::duration_cast<std::chrono::nanoseconds> (end - begin).count() << "ns" << std::endl;
-            blob.insert(blob.end(), hash.begin(),
-                std::min(hash.end(), hash.begin() + length / 8 - blob.size()));
-        }
-        assert ((int) blob.size() * 8 == length);
-        integer p(blob);  // p = 7 (mod 8), 2^1023 <= p < 2^1024
-        for (int b: bitmask)
-            p.set_bit(b, true);
-
-        i++;
-
-        if (p.prime())
-        {
-            // std::cout << "Avg: " << result / counter << std::endl;
-            return std::make_tuple(p, i);
         }
     }
 }
